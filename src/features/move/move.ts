@@ -25,10 +25,10 @@ import { TYPES } from "../../base/types";
 import { MouseListener } from "../../base/views/mouse-tool";
 import { IVNodePostprocessor } from "../../base/views/vnode-postprocessor";
 import { setAttr } from "../../base/views/vnode-utils";
-import { SEdge } from "../../graph/sgraph";
+import { SEdge, SNode, SGraph } from "../../graph/sgraph";
 import { CommitModelAction } from "../../model-source/commit-model";
-import { add, center, linear, Point, subtract } from '../../utils/geometry';
-import { findChildrenAtPosition, isAlignable } from "../bounds/model";
+import { add, center, linear, Point, subtract, Bounds } from '../../utils/geometry';
+import { findChildrenAtPosition, isAlignable, SShapeElement } from "../bounds/model";
 import { isCreatingOnDrag } from "../edit/create-on-drag";
 import { DeleteElementAction } from "../edit/delete";
 import { SwitchEditModeAction } from "../edit/edit-routing";
@@ -552,6 +552,13 @@ export class MoveMouseListener extends MouseListener {
                             result.push(new SwitchEditModeAction([], [element.id]));
                     }
                 });
+
+            if (target.root instanceof SGraph && target.root.layoutOptions?.bindChildren === true) {
+                const fixAction = this.fixToParentBounds(target);
+                if (fixAction) {
+                    result.push(fixAction);
+                }
+            }
         }
         if (!hasReconnected) {
             const edgeInProgress = target.root.index.getById(edgeInProgressID);
@@ -571,6 +578,52 @@ export class MoveMouseListener extends MouseListener {
         this.startDragPosition = undefined;
         this.elementId2startPos.clear();
         return result;
+    }
+
+    protected fixToParentBounds(target: SModelElement): MoveAction | undefined {
+
+        while (target instanceof SChildElement && !(target instanceof SNode)) {
+            target = target.parent;
+        }
+
+        const parentBounds = this.calculateParentBounds(target);
+        if (parentBounds && target instanceof SShapeElement) {
+            const bounds = target.bounds;
+            let x: number | undefined;
+            let y: number | undefined;
+            if (bounds.x + bounds.width > parentBounds.width) {
+                x = parentBounds.width - bounds.width;
+            }
+            if (bounds.y + bounds.height > parentBounds.height) {
+                y = parentBounds.height - bounds.height;
+            }
+            if (bounds.y < 0) {
+                y = 0;
+            }
+            if (bounds.x < 0) {
+                x = 0;
+            }
+            // We have to check specifically for undefined here
+            // if (x === 0) a !x will still evaluate to true
+            if (x === undefined && y === undefined) {
+                return undefined;
+            }
+            x = x ?? bounds.x;
+            y = y ?? bounds.y;
+            return new MoveAction([{ elementId: target.id, toPosition: { x, y} }], true, true);
+        }
+        return undefined;
+    }
+
+    protected calculateParentBounds(target: SModelElement): Bounds | undefined {
+        let parent: SNode | undefined = undefined;
+        while (target instanceof SChildElement && !parent) {
+            target = target.parent;
+            if (target instanceof SNode) {
+                parent = target;
+            }
+        }
+        return parent?.bounds;
     }
 
     decorate(vnode: VNode, element: SModelElement): VNode {

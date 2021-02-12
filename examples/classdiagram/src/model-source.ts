@@ -429,7 +429,8 @@ export class ClassDiagramModelSource extends LocalModelSource {
                 paddingLeft: 7,
                 paddingRight: 7,
                 paddingTop: 7,
-                paddingBottom: 7
+                paddingBottom: 7,
+                bindChildren: true
             }
         };
         this.expansionState = {
